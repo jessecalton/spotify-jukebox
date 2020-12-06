@@ -1,16 +1,24 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const passport = require('passport');
 const cookieSession = require('cookie-session');
 const bodyParser = require('body-parser');
 const SpotifyStrategy = require('passport-spotify').Strategy;
 const keys = require('./config/dev.js');
 
+mongoose.connect(keys.mongoURI);
+require('./models/User');
+const User = mongoose.model('users');
+
 passport.serializeUser((user, done) => {
   done(null, user);
 });
 
-passport.deserializeUser((user, done) => {
-  done(null, user);
+passport.deserializeUser((id, done) => {
+  console.log(id);
+  User.findById(id).then((user) => {
+    done(null, user);
+  });
 });
 
 passport.use(
@@ -20,10 +28,13 @@ passport.use(
       clientSecret: keys.spotifyClientSecret,
       callbackURL: 'http://localhost:5000/auth/spotify/callback',
     },
-    function (accessToken, refreshToken, expires_in, profile, done) {
-      console.log(accessToken);
-      console.log(expires_in);
-      return done(null, profile);
+    async (accessToken, refreshToken, expires_in, profile, done) => {
+      const existingUser = await User.findOne({ spotifyId: profile.id });
+      if (existingUser) {
+        return done(null, existingUser);
+      }
+      const user = await new User({ spotifyId: profile.id }).save();
+      done(null, user);
       // User.findOrCreate({ spotifyId: profile.id }, function (err, user) {
       //   return done(err, user);
       // });
@@ -56,7 +67,10 @@ app.get(
 
 app.get(
   '/auth/spotify/callback',
-  passport.authenticate('spotify', { failureRedirect: '/login' }),
+  passport.authenticate('spotify', {
+    failureRedirect: '/',
+    failureFlash: true,
+  }),
   (req, res) => {
     res.redirect('/');
   }
