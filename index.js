@@ -5,6 +5,7 @@ const cookieSession = require('cookie-session');
 const bodyParser = require('body-parser');
 const SpotifyStrategy = require('passport-spotify').Strategy;
 const keys = require('./config/dev.js');
+const axios = require('axios');
 
 mongoose.connect(keys.mongoURI);
 require('./models/User');
@@ -15,7 +16,6 @@ passport.serializeUser((user, done) => {
 });
 
 passport.deserializeUser((id, done) => {
-  console.log(id);
   User.findById(id).then((user) => {
     done(null, user);
   });
@@ -31,9 +31,18 @@ passport.use(
     async (accessToken, refreshToken, expires_in, profile, done) => {
       const existingUser = await User.findOne({ spotifyId: profile.id });
       if (existingUser) {
+        const query = {
+          spotifyAccessToken: accessToken,
+          spotifyRefreshToken: refreshToken,
+        };
+        User.update(query, { spotifyId: profile.id });
         return done(null, existingUser);
       }
-      const user = await new User({ spotifyId: profile.id }).save();
+      const user = await new User({
+        spotifyId: profile.id,
+        spotifyAccessToken: accessToken,
+        spotifyRefreshToken: refreshToken,
+      }).save();
       done(null, user);
       // User.findOrCreate({ spotifyId: profile.id }, function (err, user) {
       //   return done(err, user);
@@ -59,7 +68,12 @@ app.get('/', (req, res) => {
 app.get(
   '/auth/spotify',
   passport.authenticate('spotify', {
-    scope: ['user-read-email', 'user-read-private'],
+    scope: [
+      'user-read-email',
+      'user-read-private',
+      'playlist-read-private',
+      'streaming',
+    ],
     showDialog: true,
   }),
   (req, res) => {}
@@ -75,6 +89,24 @@ app.get(
     res.redirect('/');
   }
 );
+
+app.get('/api/playlists', async (req, res) => {
+  try {
+    const response = await axios.get(
+      'https://api.spotify.com/v1/me/playlists',
+      {
+        headers: {
+          Authorization: `Bearer ${req.user.spotifyAccessToken}`,
+          Accept: 'application/json',
+        },
+      }
+    );
+    let data = response.data;
+    res.send(data);
+  } catch (error) {
+    console.log(error.response.data);
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT);
