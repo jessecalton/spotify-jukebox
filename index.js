@@ -4,7 +4,7 @@ const passport = require('passport');
 const cookieSession = require('cookie-session');
 const bodyParser = require('body-parser');
 const SpotifyStrategy = require('passport-spotify').Strategy;
-const keys = require('./config/dev.js');
+const keys = require('./config/keys');
 const axios = require('axios');
 
 mongoose.set('useNewUrlParser', true);
@@ -30,7 +30,8 @@ passport.use(
     {
       clientID: keys.spotifyClientID,
       clientSecret: keys.spotifyClientSecret,
-      callbackURL: 'http://localhost:5000/auth/spotify/callback',
+      callbackURL: '/auth/spotify/callback',
+      proxy: true,
     },
     async (accessToken, refreshToken, expires_in, profile, done) => {
       const query = {
@@ -116,8 +117,6 @@ app.get('/api/playlists', async (req, res) => {
 });
 
 app.get('/api/playlists/:id', async (req, res) => {
-  console.log(`https://api.spotify.com/v1/playlists/${req.params.id}/tracks`);
-  console.log(req.user.spotifyAccessToken);
   try {
     const response = await axios.get(
       `https://api.spotify.com/v1/playlists/${req.params.id}/tracks`,
