@@ -7,6 +7,10 @@ const SpotifyStrategy = require('passport-spotify').Strategy;
 const keys = require('./config/dev.js');
 const axios = require('axios');
 
+mongoose.set('useNewUrlParser', true);
+mongoose.set('useFindAndModify', false);
+mongoose.set('useCreateIndex', true);
+mongoose.set('useUnifiedTopology', true);
 mongoose.connect(keys.mongoURI);
 require('./models/User');
 const User = mongoose.model('users');
@@ -29,13 +33,15 @@ passport.use(
       callbackURL: 'http://localhost:5000/auth/spotify/callback',
     },
     async (accessToken, refreshToken, expires_in, profile, done) => {
-      const existingUser = await User.findOne({ spotifyId: profile.id });
+      const query = {
+        spotifyAccessToken: accessToken,
+        spotifyRefreshToken: refreshToken,
+      };
+      const existingUser = await User.findOneAndUpdate(
+        { spotifyId: profile.id },
+        query
+      );
       if (existingUser) {
-        const query = {
-          spotifyAccessToken: accessToken,
-          spotifyRefreshToken: refreshToken,
-        };
-        User.update(query, { spotifyId: profile.id });
         return done(null, existingUser);
       }
       const user = await new User({
@@ -98,6 +104,28 @@ app.get('/api/playlists', async (req, res) => {
         headers: {
           Authorization: `Bearer ${req.user.spotifyAccessToken}`,
           Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    let data = response.data;
+    res.send(data);
+  } catch (error) {
+    console.log(error.response.data);
+  }
+});
+
+app.get('/api/playlists/:id', async (req, res) => {
+  console.log(`https://api.spotify.com/v1/playlists/${req.params.id}/tracks`);
+  console.log(req.user.spotifyAccessToken);
+  try {
+    const response = await axios.get(
+      `https://api.spotify.com/v1/playlists/${req.params.id}/tracks`,
+      {
+        headers: {
+          Authorization: `Bearer ${req.user.spotifyAccessToken}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
         },
       }
     );
